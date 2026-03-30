@@ -1,10 +1,13 @@
 package com.csgs.openAQ;
 
+import java.io.IOError;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.csgs.Coordinates;
 
@@ -35,30 +38,44 @@ public class openAQClient {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString()); 
         return response.body();
     }
-    public void parselocationJson(String json) throws IOException{
+    public List<AQIData> parselocationJson(String json) throws IOException{
         ObjectMapper mapper = new ObjectMapper();
         JsonNode rootNode = mapper.readTree(json);
         JsonNode resultsNode = rootNode.get("results");
-        int sensorID =0;
-        for (JsonNode locationNode : resultsNode) {
+        List<AQIData> aqiList = new ArrayList<>();
+
+        
+        for (JsonNode locationNode : resultsNode) throws IOException {
             int id  = locationNode.get("id").asInt();
             String city = locationNode.get("locality").asText();
             Coordinates coordinates = new Coordinates(
                 locationNode.get("coordinates").get("latitude").asDouble(),
                 locationNode.get("coordinates").get("longitude").asDouble()
             );
+            int pm25SensorId = -1;
             for(JsonNode sensor: locationNode.get("sensors")){
-                String paramName = sensor.get("parameter").get("name").asText();
-                if(paramName.equals("pm25")){
-                    sensorID = sensor.get("id").asInt();
+                if(sensor.get("parameter").get("name").asText().equals("pm25")){
+                    pm25SensorId = sensor.get("id").asInt();
+                    break;
                 }
             }
+            if(pm25SensorId == -1){
+                continue;
+            }
+
+            String latestJson = readings(id);
+            double pm25 = parsePm25(latestJson, pm25SensorId);
+            if(pm25 == -1){
+                continue;
+           }
+           aqiList.add(new AQIData(city,coordinates,pm25));
+
         }
     }
 
-    public String readings() throws IOException, InterruptedException{
+    public String readings(int locationId) throws IOException, InterruptedException{
        HttpRequest request =  HttpRequest.newBuilder()
-            .uri(URI.create("https://api.openaq.org/v3/locations/494922/latest"))
+            .uri(URI.create("https://api.openaq.org/v3/locations/" +locationId +"/latest"))
             .header("x-api-key", APIKEY)
             .GET()
             .build();
@@ -66,6 +83,17 @@ public class openAQClient {
         return response.body();
     }
     
+    public double parsePm25(String json, int pm25SensorId) throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    JsonNode results = mapper.readTree(json).get("results");
+
+    for (JsonNode reading : results) {
+        if (reading.get("sensorsId").asInt() == pm25SensorId) {
+            return reading.get("value").asDouble();
+        }
+    }
+    return -1;
+}
     
 
 }
