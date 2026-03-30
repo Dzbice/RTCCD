@@ -1,4 +1,4 @@
-package com.csgs.openAQ;
+package com.csgs.firms;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -8,13 +8,14 @@ import com.csgs.Coordinates;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
-public class AQhandle implements HttpHandler {
+public class firmsHandle implements HttpHandler {
 
-    private final openAQClient client = new openAQClient();
+    private final firmsClient client = new firmsClient();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
+
             String query = exchange.getRequestURI().getQuery();
             double lat = 0;
             double lon = 0;
@@ -31,24 +32,23 @@ public class AQhandle implements HttpHandler {
                     }
                 }
             }
-            List<AQIData> data = client.parselocationJson(client.findAll(new Coordinates(lat, lon)));
+            String raw = client.findAll(new Coordinates(lat, lon, 1)); // one call, larger bbox
+            System.out.println("FIRMS raw: " + raw);
+            List<Coordinates> coords = client.dataParse(raw); // reuse it
+            System.out.println("Fires found: " + coords.size());
 
             StringBuilder json = new StringBuilder("[");
-            for (int i = 0; i < data.size(); i++) {
-                AQIData d = data.get(i);
+            for (int i = 0; i < coords.size(); i++) {
+                Coordinates c = coords.get(i);
                 json.append("{")
-                        .append("\"location\":\"").append(d.getLocation()).append("\",")
-                        .append("\"lat\":").append(d.getCoordinates().getLatitude()).append(",")
-                        .append("\"lon\":").append(d.getCoordinates().getLongitude()).append(",")
-                        .append("\"pm25\":").append(d.getPm25()).append(",")
-                        .append("\"aqi\":").append(d.getAQI())
+                        .append("\"lat\":").append(c.getLatitude()).append(",")
+                        .append("\"lon\":").append(c.getLongitude())
                         .append("}");
-                if (i < data.size() - 1) {
+                if (i < coords.size() - 1) {
                     json.append(",");
                 }
             }
             json.append("]");
-
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             byte[] bytes = json.toString().getBytes();
@@ -56,11 +56,11 @@ public class AQhandle implements HttpHandler {
             OutputStream os = exchange.getResponseBody();
             os.write(bytes);
             os.close();
-
         } catch (Exception e) {
             e.printStackTrace();
             exchange.sendResponseHeaders(500, 0);
             exchange.getResponseBody().close();
         }
     }
+
 }

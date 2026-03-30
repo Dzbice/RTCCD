@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Climate Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        #controls {
+            position: absolute;
+            top: 10px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        #alertBox {
+            position: absolute;
+            top: 70px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: #ff4444;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            display: none;
+            font-size: 14px;
+        }
+        #legend {
+            position: absolute;
+            bottom: 30px; right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            font-size: 13px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+    </style>
+</head>
+<body>
+<div id="controls">
+    <input id="cityInput" type="text" placeholder="Enter city..." 
+           style="padding:8px; font-size:14px; width:200px;"/>
+    <button onclick="search()" style="padding:8px 14px; font-size:14px; cursor:pointer;">
+        Search
+    </button>
+    <span id="status" style="font-size:12px; color:gray;"></span>
+</div>
+
+<div id="alertBox" id="alertBox"></div>
+
+<div id="legend">
+    <b>Legend</b>
+    <div class="legend-item"><div class="dot" style="background:green"></div> AQI Good (0-50)</div>
+    <div class="legend-item"><div class="dot" style="background:yellow"></div> AQI Moderate (51-100)</div>
+    <div class="legend-item"><div class="dot" style="background:orange"></div> AQI Unhealthy (101-150)</div>
+    <div class="legend-item"><div class="dot" style="background:red"></div> AQI Unhealthy (151+)</div>
+    <div class="legend-item"><div class="dot" style="background:#000000"></div> Wildfire</div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    const map = L.map('map').setView([36.85, -76.29], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    let aqiLayer = L.layerGroup().addTo(map);
+    let fireLayer = L.layerGroup().addTo(map);
+
+    function setStatus(msg) {
+        document.getElementById('status').textContent = msg;
+    }
+
+    function showAlert(msg) {
+        const box = document.getElementById('alertBox');
+        box.textContent = msg;
+        box.style.display = 'block';
+        setTimeout(() => box.style.display = 'none', 5000);
+    }
+
+    async function search() {
+        const city = document.getElementById('cityInput').value.trim();
+        if (!city) return;
+
+        setStatus('Geocoding...');
+
+        // Step 1: geocode city via your backend
+        const geoRes = await fetch(`http://localhost:8080/api/geocode?city=${encodeURIComponent(city)}`);
+        const geo = await geoRes.json();
+
+        if (!geo.lat || !geo.lon) {
+            setStatus('City not found');
+            return;
+        }
+
+        const { lat, lon } = geo;
+        map.setView([lat, lon], 8);
+
+        // Step 2: fetch AQI
+        setStatus('Fetching AQI...');
+        aqiLayer.clearLayers();
+        const aqiRes = await fetch(`http://localhost:8080/api/aqi?lat=${lat}&lon=${lon}`);
+        const aqiData = await aqiRes.json();
+
+        let highAqi = false;
+        aqiData.forEach(station => {
+            if (station.aqi > 150) highAqi = true;
+            L.circleMarker([station.lat, station.lon], {
+                radius: 10,
+                color: aqiColor(station.aqi),
+                fillColor: aqiColor(station.aqi),
+                fillOpacity: 0.8
+            })
+            .bindPopup(`
+                <b>${station.location}</b><br>
+                PM2.5: ${station.pm25} µg/m³<br>
+                AQI: ${station.aqi}
+            `)
+            .addTo(aqiLayer);
+        });
+        if (highAqi) showAlert('⚠ Warning: Unhealthy AQI levels detected in this region!');
+
+        setStatus('Fetching fires...');
+        fireLayer.clearLayers();
+        const fireRes = await fetch(`http://localhost:8080/api/firms?lat=${lat}&lon=${lon}`);
+        const fireData = await fireRes.json();
+
+        if (fireData.length > 0) showAlert(`⚠ Warning: ${fireData.length} active fire detections in this region!`);
+        fireData.forEach(fire => {
+            L.circleMarker([fire.lat, fire.lon], {
+                radius: 7,
+                color: '#000000',
+                fillColor: '#000000',
+                fillOpacity: 0.7
+            })
+            .bindPopup('<b>Fire Detected</b>')
+            .addTo(fireLayer);
+        });
+
+        setStatus(`Done — ${aqiData.length} AQI stations, ${fireData.length} fires`);
+    }
+
+    function aqiColor(aqi) {
+        if (aqi <= 50)  return 'green';
+        if (aqi <= 100) return 'yellow';
+        if (aqi <= 150) return 'orange';
+        if (aqi <= 200) return 'red';
+        return 'purple';
+    }
+</script>
+</body>
+</html>

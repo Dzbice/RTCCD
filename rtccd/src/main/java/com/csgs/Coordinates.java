@@ -11,7 +11,7 @@ public class Coordinates {
     }
 
     public Coordinates(double latitude, double longitude) {
-        this(latitude, longitude, 0.1);
+        this(latitude, longitude, .5);
     }
 
     public double getLatitude() {

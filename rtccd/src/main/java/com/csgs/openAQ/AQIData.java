@@ -37,7 +37,7 @@ public class AQIData {
             }
         }
 
-        return -1; // out of range
+        return -1; 
     }
     public String getLocation() {
         return location;
