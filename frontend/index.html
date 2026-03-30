@@ -93,7 +93,7 @@
 
         setStatus('Geocoding...');
 
-        // Step 1: geocode city via your backend
+        
         const geoRes = await fetch(`http://localhost:8080/api/geocode?city=${encodeURIComponent(city)}`);
         const geo = await geoRes.json();
 
@@ -105,7 +105,7 @@
         const { lat, lon } = geo;
         map.setView([lat, lon], 8);
 
-        // Step 2: fetch AQI
+        
         setStatus('Fetching AQI...');
         aqiLayer.clearLayers();
         const aqiRes = await fetch(`http://localhost:8080/api/aqi?lat=${lat}&lon=${lon}`);

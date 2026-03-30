@@ -14,6 +14,5 @@ public class App {
         server.createContext("/api/firms",new firmsHandle());
         server.createContext("/api/geocode", new GeocodeHandler());
         server.start();
-        System.out.println("Running on http://localhost:8080/api/aqi");
     }
 }

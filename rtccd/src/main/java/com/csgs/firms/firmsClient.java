@@ -81,7 +81,7 @@ private final String BASE_URL =
             double lon = Double.parseDouble(parts[1]);
             coordsList.add(new Coordinates(lat, lon));
         } catch (NumberFormatException e) {
-            continue; // skip unparseable lines
+            continue; 
         }
         }
         return coordsList;
